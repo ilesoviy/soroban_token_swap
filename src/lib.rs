@@ -1,33 +1,56 @@
-//! This contract implements trading of one token pair between one seller and
-//! multiple buyer.
-//! It demonstrates one of the ways of how trading might be implemented.
+//! This contract implements swap of one token pair between one offeror and
+//! multiple acceptors.
+//! It demonstrates one of the ways of how swap might be implemented.
 #![no_std]
 
 use soroban_sdk::{
-    contract, contractimpl, contracttype, token, unwrap::UnwrapOptimized, Address, Env,
+    // xdr::{AccountId, Hash, PublicKey, ScAddress, Uint256},
+    contract, contractimpl, contracttype, token, unwrap::UnwrapOptimized, Address, Env, IntoVal, TryFromVal
 };
+
+#[derive(Clone, Copy, PartialEq)]
+#[contracttype]
+pub enum OfferStatus {
+    ACTIVE = 1,
+    COMPLETE = 2,
+    CANCEL = 3
+}
 
 #[derive(Clone)]
 #[contracttype]
 pub enum DataKey {
+    // TokenA = 0,
+    // TokenB = 1,
+    AdminState,
     Offer,
 }
 
 // Represents an offer managed by the SingleOffer contract.
-// If a seller wants to sell 1000 XLM for 100 USDC the `sell_price` would be 1000
-// and `buy_price` would be 100 (or 100 and 10, or any other pair of integers
-// in 10:1 ratio).
+// If an offeror wants to swap 1000 XLM for 100 USDC, the `send_amount` would be 1000
+// and `recv_amount` would be 100
 #[derive(Clone)]
 #[contracttype]
-pub struct Offer {
-    // Owner of this offer. Sells sell_token to get buy_token.
-    pub seller: Address,
-    pub sell_token: Address,
-    pub buy_token: Address,
-    // Seller-defined price of the sell token in arbitrary units.
-    pub sell_price: u32,
-    // Seller-defined price of the buy token in arbitrary units.
-    pub buy_price: u32,
+struct AdminState {
+    pub fee_wallet: Address,
+    pub owner: Address,
+}
+
+#[derive(Clone)]
+#[contracttype]
+struct Offer {
+    // Owner of this offer. Swaps send_token with recv_token.
+    pub offeror: Address,
+    
+    pub send_token: Address,
+    pub recv_token: Address,
+    
+    // offeror-defined amount of the send token
+    pub send_amount: i128,
+    // offeror-defined amount of the recv token
+    pub recv_amount: i128,
+    pub min_recv_amount: i128,
+
+    pub status: OfferStatus
 }
 
 #[contract]
@@ -36,70 +59,111 @@ pub struct SingleOffer;
 /*
 How this contract should be used:
 
-1. Call `create` once to create the offer and register its seller.
-2. Seller may transfer arbitrary amounts of the `sell_token` for sale to the
-   contract address for trading. They may also update the offer price.
-3. Buyers may call `trade` to trade with the offer. The contract will
-   immediately perform the trade and send the respective amounts of `buy_token`
-   and `sell_token` to the seller and buyer respectively.
-4. Seller may call `withdraw` to claim any remaining `sell_token` balance.
+1. Call `create` once to create an offer and register its offeror.
+2. Offeror transfers send_amount of the `send_token` to the
+   contract address for swap. He may also update the recv_amount and/or min_recv_amount.
+3. Acceptors may call `accept` to accept the offer. The contract will
+   immediately perform the swap and send the respective amounts of `recv_token`
+   and `send_token` to the offeror and acceptor respectively.
+4. Offeror may call `close` to claim any remaining `send_token` balance.
 */
 #[contractimpl]
 impl SingleOffer {
-    // Creates the offer for seller for the given token pair and initial price.
-    // See comment above the `Offer` struct for information on pricing.
+    // calculate fee
+    pub fn calculate_fee(amount: i128) -> i128 {
+        // fee is 0.025%
+        amount * 25 / 10000
+    }
+
+    // Creates the offer for offeror for the given token pair and initial amounts.
+    // See comment above the `Offer` struct for information on swap.
     pub fn create(
         e: Env,
-        seller: Address,
-        sell_token: Address,
-        buy_token: Address,
-        sell_price: u32,
-        buy_price: u32,
+        offeror: Address,
+        send_token: Address,
+        recv_token: Address,
+        send_amount: i128,
+        recv_amount: i128,
+        min_recv_amount: i128,
     ) {
         if e.storage().instance().has(&DataKey::Offer) {
             panic!("offer is already created");
         }
-        if buy_price == 0 || sell_price == 0 {
-            panic!("zero price is not allowed");
+        
+        // check if both tokens are allowed
+        // if !e.storage().instance().has(&DataKey::TokenA) || !e.storage().instance().has(&DataKey::TokenB) {
+        //     panic!("tokens aren't allowed");
+        // }
+        if send_amount == 0 || recv_amount == 0 {
+            panic!("zero amount is not allowed");
         }
-        // Authorize the `create` call by seller to verify their identity.
-        seller.require_auth();
+        if min_recv_amount > recv_amount {
+            panic!("min_recv_amount can't be greater than recv_amount");
+        }
+        
+        // Authorize the `create` call by offeror to verify their identity.
+        offeror.require_auth();
+
+        let fee: i128 = /*calculate_fee(send_amount)*/ send_amount * 25 / 10000;
+        // let fee_wallet: Address = Address::unchecked_new(&e, "GBHNNZGD7UUSOIV3J3VH2PC7LPDRLRWJ4SMMBKDBHRIPDWLXRRZ6NA2Q");
+        
+        let contract = e.current_contract_address();
+        let send_token_client = token::Client::new(&e, &send_token);
+        
+        // if send_token_client.balance() < (send_amount + fee) {
+        //     panic!("insufficient balance");
+        // }
+
+        send_token_client.transfer(&offeror, &contract, &send_amount);
+        // send_token_client.transfer(&offeror, &fee_wallet, &fee);
+
         write_offer(
             &e,
             &Offer {
-                seller,
-                sell_token,
-                buy_token,
-                sell_price,
-                buy_price,
+                offeror,
+                send_token,
+                recv_token,
+                send_amount,
+                recv_amount,
+                min_recv_amount,
+                status: OfferStatus::ACTIVE,
             },
         );
+
+        // emit OfferCreated event
     }
 
-    // Trades `buy_token_amount` of buy_token from buyer for `sell_token` amount
-    // defined by the price.
-    // `min_sell_amount` defines a lower bound on the price that the buyer would
-    // accept.
-    // Buyer needs to authorize the `trade` call and internal `transfer` call to
-    // the contract address.
-    pub fn trade(e: Env, buyer: Address, buy_token_amount: i128, min_sell_token_amount: i128) {
-        // Buyer needs to authorize the trade.
-        buyer.require_auth();
+    // Swaps `amount` of recv_token from acceptor for `send_token` amount calculated by the amount.
+    // acceptor needs to authorize the `swap` call and internal `transfer` call to the contract address.
+    pub fn accept(e: Env, acceptor: Address, amount: i128) {
+        let mut offer = load_offer(&e);
+
+        if offer.status != OfferStatus::ACTIVE {
+            panic!("offer not available");
+        }
+        if offer.recv_amount < amount {
+            panic!("amount is greater than max_recv_amount");
+        }
+        if amount < offer.min_recv_amount {
+            panic!("amount must be more than min_recv_amount");
+        }
+        
+        // acceptor needs to authorize the trade.
+        acceptor.require_auth();
 
         // Load the offer and prepare the token clients to do the trade.
-        let offer = load_offer(&e);
-        let sell_token_client = token::Client::new(&e, &offer.sell_token);
-        let buy_token_client = token::Client::new(&e, &offer.buy_token);
+        let send_token_client = token::Client::new(&e, &offer.send_token);
+        let recv_token_client = token::Client::new(&e, &offer.recv_token);
 
-        // Compute the amount of token that buyer needs to receive.
-        let sell_token_amount = buy_token_amount
-            .checked_mul(offer.sell_price as i128)
-            .unwrap_optimized()
-            / offer.buy_price as i128;
+        let fee: i128 = /*calculate_fee(amount)*/ amount * 25 / 10000;
+        // let fee_wallet: Address = Address::unchecked_new(&e, "GBHNNZGD7UUSOIV3J3VH2PC7LPDRLRWJ4SMMBKDBHRIPDWLXRRZ6NA2Q");
 
-        if sell_token_amount < min_sell_token_amount {
-            panic!("price is too low");
-        }
+        // if recv_token_client.balance() < (amount + fee) {
+        //     panic!("insufficient balance");
+        // }
+
+        // Compute the amount of send_token that acceptor can receive.
+        let prop_send_amount = amount.checked_mul(offer.send_amount as i128).unwrap_optimized() / offer.recv_amount as i128;
 
         let contract = e.current_contract_address();
 
@@ -108,52 +172,87 @@ impl SingleOffer {
         // just trap and roll back in case if any of the transfers fails for
         // any reason, including insufficient balance.
 
-        // Transfer the `buy_token` from buyer to this contract.
-        // This `transfer` call should be authorized by buyer.
-        // This could as well be a direct transfer to the seller, but sending to
+        // Transfer the `recv_token` from acceptor to this contract.
+        // This `transfer` call should be authorized by acceptor.
+        // This could as well be a direct transfer to the offeror, but sending to
         // the contract address allows building more transparent signature
-        // payload where the buyer doesn't need to worry about sending token to
+        // payload where the acceptor doesn't need to worry about sending token to
         // some 'unknown' third party.
-        buy_token_client.transfer(&buyer, &contract, &buy_token_amount);
-        // Transfer the `sell_token` from contract to buyer.
-        sell_token_client.transfer(&contract, &buyer, &sell_token_amount);
-        // Transfer the `buy_token` to the seller immediately.
-        buy_token_client.transfer(&contract, &offer.seller, &buy_token_amount);
-    }
+        // recv_token_client.transfer(&acceptor, &fee_wallet, &fee);
+        // Transfer the `recv_token` to the offeror immediately.
+        recv_token_client.transfer(&acceptor, &offer.offeror, &amount);
+        // Transfer the `send_token` from contract to acceptor.
+        send_token_client.transfer(&contract, &acceptor, &prop_send_amount);
 
-    // Sends amount of token from this contract to the seller.
-    // This is intentionally flexible so that the seller can withdraw any
-    // outstanding balance of the contract (in case if they mistakenly
-    // transferred wrong token to it).
-    // Must be authorized by seller.
-    pub fn withdraw(e: Env, token: Address, amount: i128) {
-        let offer = load_offer(&e);
-        offer.seller.require_auth();
-        token::Client::new(&e, &token).transfer(
-            &e.current_contract_address(),
-            &offer.seller,
-            &amount,
-        );
-    }
+        // Update Offer
+        offer.send_amount -= prop_send_amount;
+        offer.recv_amount -= amount;
 
-    // Updates the price.
-    // Must be authorized by seller.
-    pub fn updt_price(e: Env, sell_price: u32, buy_price: u32) {
-        if buy_price == 0 || sell_price == 0 {
-            panic!("zero price is not allowed");
+        if offer.recv_amount == 0 {
+            offer.status = OfferStatus::COMPLETE;
+            // emit OfferCompleted event
         }
-        let mut offer = load_offer(&e);
-        offer.seller.require_auth();
-        offer.sell_price = sell_price;
-        offer.buy_price = buy_price;
+        else if offer.recv_amount < offer.min_recv_amount {
+            offer.min_recv_amount = offer.recv_amount;
+        }
+
         write_offer(&e, &offer);
+
+        // emit OfferAccepted event
+    }
+
+    // Cancel offer
+    // Must be authorized by offeror.
+    pub fn close(e: Env) {
+        let mut offer = load_offer(&e);
+
+        if offer.status != OfferStatus::ACTIVE {
+            panic!("offer not available");
+        }
+
+        offer.offeror.require_auth();
+        token::Client::new(&e, &offer.send_token).transfer(
+            &e.current_contract_address(),
+            &offer.offeror,
+            &offer.send_amount,
+        );
+
+        offer.status = OfferStatus::CANCEL;
+        write_offer(&e, &offer);
+
+        // emit OfferRevoked event
+    }
+
+    // Updates offer
+    // Must be authorized by offeror.
+    pub fn update(e: Env, recv_amount: i128, min_recv_amount: i128) {
+        if recv_amount == 0 {
+            panic!("zero amount is not allowed");
+        }
+        if min_recv_amount > recv_amount {
+            panic!("min_recv_amount can't be greater than recv_amount");
+        }
+
+        let mut offer = load_offer(&e);
+
+        if offer.status != OfferStatus::ACTIVE {
+            panic!("offer not available");
+        }
+
+        offer.offeror.require_auth();
+        offer.recv_amount = recv_amount;
+        offer.min_recv_amount = min_recv_amount;
+        write_offer(&e, &offer);
+
+        // emit OfferUpdated event
     }
 
     // Returns the current state of the offer.
-    pub fn get_offer(e: Env) -> Offer {
+    fn get_offer(e: Env) -> Offer {
         load_offer(&e)
     }
 }
+
 
 fn load_offer(e: &Env) -> Offer {
     e.storage().instance().get(&DataKey::Offer).unwrap()
@@ -162,5 +261,6 @@ fn load_offer(e: &Env) -> Offer {
 fn write_offer(e: &Env, offer: &Offer) {
     e.storage().instance().set(&DataKey::Offer, offer);
 }
+
 
 mod test;

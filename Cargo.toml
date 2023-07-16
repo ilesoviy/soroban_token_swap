@@ -1,5 +1,5 @@
 [package]
-name = "soroban-single-offer-contract"
+name = "soroban-token-exchange-contract"
 version = "0.0.0"
 edition = "2021"
 publish = false

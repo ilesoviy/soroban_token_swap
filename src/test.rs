@@ -21,34 +21,50 @@ fn create_token_contract<'a>(
 
 fn create_single_offer_contract<'a>(
     e: &Env,
-    seller: &Address,
-    sell_token: &Address,
-    buy_token: &Address,
-    sell_price: u32,
-    buy_price: u32,
+    offeror: &Address,
+    send_token: &Address,
+    recv_token: &Address,
+    send_amount: i128,
+    recv_amount: i128,
+    min_recv_amount: i128,
 ) -> SingleOfferClient<'a> {
     let offer = SingleOfferClient::new(e, &e.register_contract(None, crate::SingleOffer {}));
-    offer.create(seller, sell_token, buy_token, &sell_price, &buy_price);
-
-    // Verify that authorization is required for the seller.
+    offer.create(offeror, send_token, recv_token, &(send_amount as i128), &(recv_amount as i128), &min_recv_amount);
+    
+    // Verify that authorization is required for the offeror.
     assert_eq!(
         e.auths(),
         std::vec![(
-            seller.clone(),
+            offeror.clone(),
             AuthorizedInvocation {
                 function: AuthorizedFunction::Contract((
                     offer.address.clone(),
                     symbol_short!("create"),
                     (
-                        seller,
-                        sell_token.clone(),
-                        buy_token.clone(),
-                        sell_price,
-                        buy_price
+                        offeror,
+                        send_token.clone(),
+                        recv_token.clone(),
+                        send_amount,
+                        recv_amount,
+                        min_recv_amount
                     )
                         .into_val(e)
                 )),
-                sub_invocations: std::vec![]
+                sub_invocations: std::vec![
+                    AuthorizedInvocation {
+                        function: AuthorizedFunction::Contract((
+                            send_token.clone(),
+                            symbol_short!("transfer"),
+                            (
+                                offeror,
+                                offer.address.clone(),
+                                send_amount,
+                            )
+                                .into_val(e)
+                        )),
+                        sub_invocations: std::vec![],
+                    },
+                ]
             }
         )]
     );
@@ -62,112 +78,118 @@ fn test() {
     e.mock_all_auths();
 
     let token_admin = Address::random(&e);
-    let seller = Address::random(&e);
-    let buyer = Address::random(&e);
+    let offeror = Address::random(&e);
+    let acceptor = Address::random(&e);
 
-    let sell_token = create_token_contract(&e, &token_admin);
-    let sell_token_client = sell_token.0;
-    let sell_token_admin_client = sell_token.1;
+    let send_token = create_token_contract(&e, &token_admin);
+    let send_token_client = send_token.0;
+    let send_token_admin_client = send_token.1;
 
-    let buy_token = create_token_contract(&e, &token_admin);
-    let buy_token_client = buy_token.0;
-    let buy_token_admin_client = buy_token.1;
+    let recv_token = create_token_contract(&e, &token_admin);
+    let recv_token_client = recv_token.0;
+    let recv_token_admin_client = recv_token.1;
 
-    // The price here is 1 sell_token for 2 buy_token.
+    // Mint 1000 send_tokens to offeror and 100 recv_tokens to acceptor.
+    send_token_admin_client.mint(&offeror, &1000);
+    recv_token_admin_client.mint(&acceptor, &100);
+    
+    // Initial transaction 1
+    // 500 send_tokens : 50 recv_tokens (10 min_recv_tokens)
     let offer = create_single_offer_contract(
         &e,
-        &seller,
-        &sell_token_client.address,
-        &buy_token_client.address,
-        1,
-        2,
+        &offeror,
+        &send_token_client.address,
+        &recv_token_client.address,
+        500,
+        50,
+        10,
     );
-    // Give some sell_token to seller and buy_token to buyer.
-    sell_token_admin_client.mint(&seller, &1000);
-    buy_token_admin_client.mint(&buyer, &1000);
-    // Deposit 100 sell_token from seller into offer.
-    sell_token_client.transfer(&seller, &offer.address, &100);
-
-    // Try trading 20 buy_token for at least 11 sell_token - that wouldn't
-    // succeed because the offer price would result in 10 sell_token.
-    assert!(offer.try_trade(&buyer, &20_i128, &11_i128).is_err());
-    // Buyer trades 20 buy_token for 10 sell_token.
-    offer.trade(&buyer, &20_i128, &10_i128);
-    // Verify that authorization is required for the buyer.
+    
+    
+    // Try accepting 9 recv_token for at least 10 recv_token - that wouldn't
+    // succeed because minimum recv amount is 10 recv_token.
+    assert!(offer.try_accept(&acceptor, &9_i128).is_err());
+    
+    // acceptor accepts 10 recv_tokens.
+    offer.accept(&acceptor, &10_i128);
+    // Verify that authorization is required for the acceptor.
     assert_eq!(
         e.auths(),
         std::vec![(
-            buyer.clone(),
+            acceptor.clone(),
             AuthorizedInvocation {
                 function: AuthorizedFunction::Contract((
                     offer.address.clone(),
-                    symbol_short!("trade"),
-                    (&buyer, 20_i128, 10_i128).into_val(&e)
+                    symbol_short!("accept"),
+                    (&acceptor, 10_i128).into_val(&e)
                 )),
                 sub_invocations: std::vec![AuthorizedInvocation {
                     function: AuthorizedFunction::Contract((
-                        buy_token_client.address.clone(),
+                        recv_token_client.address.clone(),
                         symbol_short!("transfer"),
-                        (buyer.clone(), &offer.address, 20_i128).into_val(&e)
+                        (&acceptor, &offeror, 10_i128).into_val(&e)
                     )),
-                    sub_invocations: std::vec![]
+                    sub_invocations: std::vec![]    // ???
                 }]
             }
         )]
     );
 
-    assert_eq!(sell_token_client.balance(&seller), 900);
-    assert_eq!(sell_token_client.balance(&buyer), 10);
-    assert_eq!(sell_token_client.balance(&offer.address), 90);
-    assert_eq!(buy_token_client.balance(&seller), 20);
-    assert_eq!(buy_token_client.balance(&buyer), 980);
-    assert_eq!(buy_token_client.balance(&offer.address), 0);
+    assert_eq!(send_token_client.balance(&offeror), 500);
+    assert_eq!(send_token_client.balance(&offer.address), 400);
+    assert_eq!(send_token_client.balance(&acceptor), 100);
+    
+    assert_eq!(recv_token_client.balance(&offeror), 10);
+    assert_eq!(recv_token_client.balance(&acceptor), 90);
+    assert_eq!(recv_token_client.balance(&offer.address), 0);
 
-    // Withdraw 70 sell_token from offer.
-    offer.withdraw(&sell_token_client.address, &70);
+
+    // recv_amount = 80, min_recv_amount = 20
+    offer.update(&80_i128, &20_i128);
     // Verify that the seller has to authorize this.
     assert_eq!(
         e.auths(),
         std::vec![(
-            seller.clone(),
+            offeror.clone(),
             AuthorizedInvocation {
                 function: AuthorizedFunction::Contract((
                     offer.address.clone(),
-                    symbol_short!("withdraw"),
-                    (sell_token_client.address.clone(), 70_i128).into_val(&e)
+                    Symbol::new(&e, "update"),
+                    (80_i128, 20_i128).into_val(&e)
                 )),
                 sub_invocations: std::vec![]
             }
         )]
     );
 
-    assert_eq!(sell_token_client.balance(&seller), 970);
-    assert_eq!(sell_token_client.balance(&offer.address), 20);
 
-    // The price here is 1 sell_token = 1 buy_token.
-    offer.updt_price(&1, &1);
-    // Verify that the seller has to authorize this.
+    // acceptor accepts 40 recv_tokens.
+    offer.accept(&acceptor, &40_i128);
+    
+    assert_eq!(send_token_client.balance(&offeror), 500);
+    assert_eq!(send_token_client.balance(&offer.address), 200);
+    assert_eq!(send_token_client.balance(&acceptor), 300);
+    
+    assert_eq!(recv_token_client.balance(&offeror), 50);
+    assert_eq!(recv_token_client.balance(&offer.address), 0);
+    assert_eq!(recv_token_client.balance(&acceptor), 50);
+
+
+    // offeror closes offer
+    offer.close();
+    // Verify that authorization is required for the acceptor.
     assert_eq!(
         e.auths(),
         std::vec![(
-            seller.clone(),
+            offeror.clone(),
             AuthorizedInvocation {
                 function: AuthorizedFunction::Contract((
                     offer.address.clone(),
-                    Symbol::new(&e, "updt_price"),
-                    (1_u32, 1_u32).into_val(&e)
+                    symbol_short!("close"),
+                    ().into_val(&e),
                 )),
                 sub_invocations: std::vec![]
             }
         )]
     );
-
-    // Buyer trades 10 buy_token for 10 sell_token.
-    offer.trade(&buyer, &10_i128, &9_i128);
-    assert_eq!(sell_token_client.balance(&seller), 970);
-    assert_eq!(sell_token_client.balance(&buyer), 20);
-    assert_eq!(sell_token_client.balance(&offer.address), 10);
-    assert_eq!(buy_token_client.balance(&seller), 30);
-    assert_eq!(buy_token_client.balance(&buyer), 970);
-    assert_eq!(buy_token_client.balance(&offer.address), 0);
 }

@@ -201,28 +201,6 @@ impl SingleOffer {
         // emit OfferAccepted event
     }
 
-    // Cancel offer
-    // Must be authorized by offeror.
-    pub fn close(e: Env) {
-        let mut offer = load_offer(&e);
-
-        if offer.status != OfferStatus::ACTIVE {
-            panic!("offer not available");
-        }
-
-        offer.offeror.require_auth();
-        token::Client::new(&e, &offer.send_token).transfer(
-            &e.current_contract_address(),
-            &offer.offeror,
-            &offer.send_amount,
-        );
-
-        offer.status = OfferStatus::CANCEL;
-        write_offer(&e, &offer);
-
-        // emit OfferRevoked event
-    }
-
     // Updates offer
     // Must be authorized by offeror.
     pub fn update(e: Env, recv_amount: i128, min_recv_amount: i128) {
@@ -245,6 +223,28 @@ impl SingleOffer {
         write_offer(&e, &offer);
 
         // emit OfferUpdated event
+    }
+
+    // Cancel offer
+    // Must be authorized by offeror.
+    pub fn close(e: Env) {
+        let mut offer = load_offer(&e);
+
+        if offer.status != OfferStatus::ACTIVE {
+            panic!("offer not available");
+        }
+
+        offer.offeror.require_auth();
+        token::Client::new(&e, &offer.send_token).transfer(
+            &e.current_contract_address(),
+            &offer.offeror,
+            &offer.send_amount,
+        );
+
+        offer.status = OfferStatus::CANCEL;
+        write_offer(&e, &offer);
+
+        // emit OfferRevoked event
     }
 
     // Returns the current state of the offer.

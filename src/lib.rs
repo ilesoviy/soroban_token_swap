@@ -10,9 +10,9 @@ mod offer;
 
 
 use soroban_sdk::{
-    contract, contractimpl, token, log, unwrap::UnwrapOptimized, Address, Env
+    token, contract, contractimpl, Address, Env, BytesN
 };
-use crate::storage_types::{ FEE_DECIMALS, FeeInfo, };
+use crate::storage_types::{ FeeInfo };
 use crate::fee::{ fee_init, fee_set };
 use crate::allow::{ allow_set, allow_reset };
 use crate::offer::{ offer_create, offer_accept, offer_update, offer_close };
@@ -23,8 +23,9 @@ pub struct TokenSwap;
 
 #[contractimpl]
 impl TokenSwap {
-    pub fn init_fee(e: Env, fee: FeeInfo) {
-        fee_init(&e, &fee);
+    pub fn init_fee(e: Env, fee_rate: u32, fee_wallet: Address) {
+        let fee_info: FeeInfo = FeeInfo {fee_rate, fee_wallet};
+        fee_init(&e, &fee_info);
     }
 
     pub fn allow_token(e: Env, token: Address) {
@@ -44,40 +45,32 @@ impl TokenSwap {
         send_amount: i128,
         recv_amount: i128,
         min_recv_amount: i128,
-    ) {
+    ) -> BytesN<32> {
         offer_create(&e, &offeror, &send_token, &recv_token, timestamp, send_amount, recv_amount, min_recv_amount)
     }
 
     pub fn accept_offer(e: Env, 
-        offeror: Address,
-        send_token: Address,
-        recv_token: Address,
-        timestamp: u64,
+        offer_id: BytesN<32>, 
         acceptor: Address, 
         amount: i128
     ) {
-        offer_accept(&e, &offeror, &send_token, &recv_token, timestamp, &acceptor, amount)
+        offer_accept(&e, &offer_id, &acceptor, amount)
     }
 
     pub fn update_offer(e: Env, 
-        offeror: Address,
-        send_token: Address,
-        recv_token: Address,
-        timestamp: u64,
+        offer_id: BytesN<32>, 
         recv_amount: i128, 
         min_recv_amount: i128
     ) {
-        offer_update(&e, &offeror, &send_token, &recv_token, timestamp, recv_amount, min_recv_amount);
+        offer_update(&e, &offer_id, recv_amount, min_recv_amount)
     }
 
     pub fn close_offer(e: Env, 
-        offeror: Address,
-        send_token: Address,
-        recv_token: Address,
-        timestamp: u64
+        offer_id: BytesN<32>
     ) {
-        offer_close(&e, &offeror, &send_token, &recv_token, timestamp)
+        offer_close(&e, &offer_id)
     }
 }
+
 
 mod test;

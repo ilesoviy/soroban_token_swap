@@ -2,14 +2,14 @@ use soroban_sdk::{ Env };
 use crate::storage_types::{ DataKey, FeeInfo };
 
 
-pub fn fee_init(e: &Env, fee: &FeeInfo) {
+pub fn fee_init(e: &Env, fee_info: &FeeInfo) {
     if fee_check(&e) {
-        panic!("FeeInfo is already initialized");
+        panic!("FeeInfo was already initialized");
     }
     
     fee_write(
         &e,
-        &fee,
+        &fee_info,
     );
 }
 
@@ -30,17 +30,17 @@ pub fn fee_get(e: &Env) -> FeeInfo {
     e.storage().instance().get(&key).unwrap()
 }
 
-pub fn fee_set(e: &Env, fee: &FeeInfo) {
+pub fn fee_set(e: &Env, fee_info: &FeeInfo) {
     if !fee_check(e) {
-        panic!("FeeInfo isn't initialized");
+        panic!("FeeInfo wasn't initialized");
     }
 
-    fee_write(e, &fee);
+    fee_write(e, &fee_info);
 }
 
 
-fn fee_write(e: &Env, fee: &FeeInfo) {
+fn fee_write(e: &Env, fee_info: &FeeInfo) {
     let key = DataKey::FEE;
 
-    e.storage().instance().set(&key, fee);
+    e.storage().instance().set(&key, fee_info);
 }    

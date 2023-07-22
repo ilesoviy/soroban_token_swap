@@ -7,7 +7,7 @@ pub fn allow_set(e: &Env, token_addr: &Address) {
     let key = DataKey::Allowance(token_addr.clone());
     
     if e.storage().instance().has(&key) && e.storage().instance().get::<_, bool>(&key).unwrap() {
-        log!(&e, "current token is already allowed");
+        log!(&e, "current token was already allowed");
         return;
     }
 
@@ -18,7 +18,7 @@ pub fn allow_reset(e: &Env, token_addr: &Address) {
     let key = DataKey::Allowance(token_addr.clone());
 
     if !e.storage().instance().has(&key) || !e.storage().instance().get::<_, bool>(&key).unwrap() {
-        log!(&e, "current token isn't allowed");
+        log!(&e, "current token wasn't allowed");
         return;
     }
 

@@ -1,7 +1,7 @@
 #![cfg(test)]
 extern crate std;
 
-use soroban_sdk::{ log, token };
+use soroban_sdk::{ log, token, BytesN };
 use crate::storage_types::{ DEF_FEE_RATE, TOKEN_DECIMALS, FeeInfo };
 use crate::{ TokenSwap, TokenSwapClient };
 
@@ -16,9 +16,10 @@ use soroban_sdk::{
 fn create_token_contract<'a>(
     e: &Env,
     admin: &Address,
-) -> (token::Client<'a>, token::AdminClient<'a>) {
+) -> (Address, token::Client<'a>, token::AdminClient<'a>) {
     let addr = e.register_stellar_asset_contract(admin.clone());
     (
+        addr.clone(),
         token::Client::new(e, &addr),
         token::AdminClient::new(e, &addr),
     )
@@ -38,23 +39,11 @@ fn test() {
     let e = Env::default();
     e.mock_all_auths();
 
+
     let token_admin = Address::random(&e);
     let offeror = Address::random(&e);
     let acceptor = Address::random(&e);
-
-    let send_token = create_token_contract(&e, &token_admin);
-    let send_token_client = send_token.0;
-    let send_token_admin_client = send_token.1;
-
-    let recv_token = create_token_contract(&e, &token_admin);
-    let recv_token_client = recv_token.0;
-    let recv_token_admin_client = recv_token.1;
-    let timestamp: u64 = e.ledger().timestamp();
     const MUL_VAL: i128 = i128::pow(10, TOKEN_DECIMALS);
-
-    // Mint 1000 send_tokens to offeror and 100 recv_tokens to acceptor.
-    send_token_admin_client.mint(&offeror, &(1000 * MUL_VAL));
-    recv_token_admin_client.mint(&acceptor, &(100 * MUL_VAL));
     
     
     // create contract
@@ -62,24 +51,41 @@ fn test() {
         &e,
     );
 
+
+    let send_token = create_token_contract(&e, &token_admin);
+    let send_token_id = send_token.0;
+    let send_token_client = send_token.1;
+    let send_token_admin_client = send_token.2;
+    send_token_admin_client.mint(&offeror, &(1000 * MUL_VAL));
+    log!(&e, "send_token_id = {}", send_token_id);
+    
+    let recv_token = create_token_contract(&e, &token_admin);
+    let recv_token_id = recv_token.0;
+    let recv_token_client = recv_token.1;
+    let recv_token_admin_client = recv_token.2;
+    recv_token_admin_client.mint(&acceptor, &(100 * MUL_VAL));
+    
+    
     // init fee
     let fee_rate = DEF_FEE_RATE;
     let fee_wallet = Address::random(&e);
 
-    token_swap.init_fee(&FeeInfo{ fee_rate, fee_wallet: fee_wallet.clone() });
+    token_swap.init_fee(&fee_rate, &fee_wallet);
 
 
     // allow tokens
-    token_swap.allow_token(&send_token_client.address);
-    token_swap.allow_token(&recv_token_client.address);
+    token_swap.allow_token(&send_token_id);
+    token_swap.allow_token(&recv_token_id);
     
     
     // Initial transaction 1 - create offer
     // 500 send_tokens : 50 recv_tokens (10 min_recv_tokens)
-    token_swap.create_offer(
+    let timestamp: u64 = e.ledger().timestamp();
+    
+    let offer_id: BytesN<32> = token_swap.create_offer(
         &offeror,
-        &send_token_client.address,
-        &recv_token_client.address,
+        &send_token_id,
+        &recv_token_id,
         &timestamp,
         &(500 * MUL_VAL),
         &(50 * MUL_VAL),
@@ -96,8 +102,8 @@ fn test() {
                     Symbol::new(&e, "create_offer"),
                     (
                         offeror.clone(),
-                        send_token_client.address.clone(),
-                        recv_token_client.address.clone(),
+                        &send_token_id,
+                        &recv_token_id,
                         timestamp,
                         500 * MUL_VAL,
                         50 * MUL_VAL,
@@ -108,7 +114,7 @@ fn test() {
                 sub_invocations: std::vec![
                     AuthorizedInvocation {
                         function: AuthorizedFunction::Contract((
-                            send_token_client.address.clone(),
+                            send_token_id.clone(),
                             symbol_short!("transfer"),
                             (
                                 offeror.clone(),
@@ -121,7 +127,7 @@ fn test() {
                     },
                     AuthorizedInvocation {
                         function: AuthorizedFunction::Contract((
-                            send_token_client.address.clone(),
+                            send_token_id.clone(),
                             symbol_short!("transfer"),
                             (
                                 offeror.clone(),
@@ -136,22 +142,40 @@ fn test() {
             }
         )]
     );
+
+    // trying to create an offer with same params - fail
+    assert!(token_swap.try_create_offer(
+        &offeror,
+        &send_token_id,
+        &recv_token_id,
+        &timestamp,
+        &(500 * MUL_VAL),
+        &(50 * MUL_VAL),
+        &(10 * MUL_VAL)).is_err());
+
+    // trying to create an offer with different timestamp
+    // let timestamp2: u64 = /*e.ledger().timestamp()*/ timestamp + 127;
+    // log!(&e, "timestamp1 = {}, timestamp2 = {}", timestamp, timestamp2);
+    // let offer_id2: BytesN<32> = token_swap.create_offer(
+    //     &offeror,
+    //     &send_token_id,
+    //     &recv_token_id,
+    //     &timestamp2,
+    //     &(500 * MUL_VAL),
+    //     &(50 * MUL_VAL),
+    //     &(10 * MUL_VAL));
     
     
     // Try accepting 9 recv_token for at least 10 recv_token - that wouldn't
     // succeed because minimum recv amount is 10 recv_token.
-    assert!(token_swap.try_accept_offer(&offeror,
-        &send_token_client.address,
-        &recv_token_client.address,
-        &timestamp,
+    assert!(token_swap.try_accept_offer(
+        &offer_id, 
         &acceptor, 
         &(9 * MUL_VAL)).is_err());
     
     // acceptor accepts 10 recv_tokens.
-    token_swap.accept_offer(&offeror,
-        &send_token_client.address,
-        &recv_token_client.address,
-        &timestamp,
+    token_swap.accept_offer(
+        &offer_id,
         &acceptor,
         &(10_i128 * MUL_VAL));
     
@@ -167,20 +191,16 @@ fn test() {
     
     
     // update (recv_amount, min_recv_amount) from (40, 10) to (80, 20)
-    token_swap.update_offer(&offeror,
-        &send_token_client.address,
-        &recv_token_client.address,
-        &timestamp,
+    token_swap.update_offer(
+        &offer_id,
         &(80_i128 * MUL_VAL),   // new recv_amount
         &(20_i128 * MUL_VAL)    // new min_recv_amount
     );
 
     
     // acceptor accepts 40 recv_tokens.
-    token_swap.accept_offer(&offeror,
-        &send_token_client.address,
-        &recv_token_client.address,
-        &timestamp,
+    token_swap.accept_offer(
+        &offer_id, 
         &acceptor, 
         &(40 * MUL_VAL));
     
@@ -196,10 +216,9 @@ fn test() {
     
     
     // offeror closes offer
-    token_swap.close_offer(&offeror,
-        &send_token_client.address,
-        &recv_token_client.address,
-        &timestamp);
+    token_swap.close_offer(
+        &offer_id
+    );
 
     assert_eq!(send_token_client.balance(&offeror), 700_i128 * MUL_VAL - 12500);
     assert_eq!(send_token_client.balance(&token_swap.address), 0);
@@ -213,6 +232,6 @@ fn test() {
 
 
     // disallow tokens
-    token_swap.disallow_token(&send_token_client.address);
-    token_swap.disallow_token(&recv_token_client.address);
+    token_swap.disallow_token(&send_token_id);
+    token_swap.disallow_token(&recv_token_id);
 }

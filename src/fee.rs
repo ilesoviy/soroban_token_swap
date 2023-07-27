@@ -2,7 +2,7 @@ use soroban_sdk::{ Env };
 use crate::storage_types::{ DataKey, FeeInfo };
 
 
-pub fn fee_init(e: &Env, fee_info: &FeeInfo) {
+pub fn fee_init(e: &Env, fee_info: &FeeInfo) -> bool {
     if fee_check(&e) {
         panic!("FeeInfo was already initialized");
     }
@@ -10,7 +10,7 @@ pub fn fee_init(e: &Env, fee_info: &FeeInfo) {
     fee_write(
         &e,
         &fee_info,
-    );
+    )
 }
 
 pub fn fee_check(e: &Env) -> bool {
@@ -27,20 +27,31 @@ pub fn fee_check(e: &Env) -> bool {
 pub fn fee_get(e: &Env) -> FeeInfo {
     let key = DataKey::FEE;
 
+    if !fee_check(&e) {
+        panic!("FeeInfo wasn't initialized");
+    }
+    
     e.storage().instance().get(&key).unwrap()
 }
 
-pub fn fee_set(e: &Env, fee_info: &FeeInfo) {
+pub fn fee_set(e: &Env, fee_info: &FeeInfo) -> bool {
     if !fee_check(e) {
         panic!("FeeInfo wasn't initialized");
     }
 
-    fee_write(e, &fee_info);
+    fee_write(e, &fee_info)
 }
 
 
-fn fee_write(e: &Env, fee_info: &FeeInfo) {
+fn fee_write(e: &Env, fee_info: &FeeInfo) -> bool {
     let key = DataKey::FEE;
 
-    e.storage().instance().set(&key, fee_info);
-}    
+    try {
+        e.storage().instance().set(&key, fee_info);
+        true
+    }
+    else {
+        panic!("FeeInfo write failed");
+        false
+    }
+}

@@ -23,17 +23,17 @@ pub struct TokenSwap;
 
 #[contractimpl]
 impl TokenSwap {
-    pub fn init_fee(e: Env, fee_rate: u32, fee_wallet: Address) {
+    pub fn init_fee(e: Env, fee_rate: u32, fee_wallet: Address) -> bool {
         let fee_info: FeeInfo = FeeInfo {fee_rate, fee_wallet};
-        fee_init(&e, &fee_info);
+        fee_init(&e, &fee_info)
     }
 
-    pub fn allow_token(e: Env, token: Address) {
+    pub fn allow_token(e: Env, token: Address) -> bool {
         allow_set(&e, &token)
     }
 
-    pub fn disallow_token(e: Env, token: Address) {
-        allow_reset(&e, &token);
+    pub fn disallow_token(e: Env, token: Address) -> bool {
+        allow_reset(&e, &token)
     }
 
     pub fn create_offer(

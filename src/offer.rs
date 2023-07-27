@@ -75,9 +75,9 @@ pub fn offer_create(
     if send_token_client.balance(&key.offeror.clone()) < transfer_amount {
         panic!("insufficient balance");
     }
-    // if （send_token_client.allowance(e.current_contract_address() < transfer_amount) {
-    //     panic!("insufficient allowance");
-    // }
+    if （send_token_client.allowance(e.current_contract_address() < transfer_amount) {
+        panic!("insufficient allowance");
+    }
 
     send_token_client.transfer(&key.offeror.clone(), &contract, &(send_amount as i128));
     send_token_client.transfer(&key.offeror.clone(), &fee_info.fee_wallet, &fee_amount);
@@ -136,9 +136,12 @@ pub fn offer_accept(e: &Env,
     let fee_info = fee_get(&e);
     let fee_amount: i128 = calculate_fee(&fee_info.clone(), amount);
 
-    // if recv_token_client.balance() < (amount + fee_amount) {
-    //     panic!("insufficient balance");
-    // }
+    if recv_token_client.balance() < (amount + fee_amount) {
+        panic!("insufficient balance");
+    }
+    if recv_token_client.allowance() < (amount + fee_amount) {
+        panic!("insufficient allowance");
+    }
 
     // Compute the amount of send_token that acceptor can receive.
     let prop_send_amount = amount.checked_mul(offer.send_amount as i128).unwrap_optimized() / offer.recv_amount as i128;
@@ -177,6 +180,9 @@ pub fn offer_accept(e: &Env,
     offer_write(&e, offer_id, &offer);
 
     // emit OfferAccepted event
+    e.events().publish((OFFER, symbol_short!("OAccept")), 
+        (offer_id.clone(), acceptor.clone(), amount)
+    );
 }
 
 // Updates offer
@@ -205,6 +211,9 @@ pub fn offer_update(e: &Env,
     offer_write(&e, offer_id, &offer);
 
     // emit OfferUpdated event
+    e.events().publish((OFFER, symbol_short!("OUpdate")), 
+        (offer_id.clone(), recv_amount, min_recv_amount)
+    );
 }
 
 // Cancel offer
@@ -229,6 +238,9 @@ pub fn offer_close(e: &Env,
     offer_write(&e, offer_id, &offer);
 
     // emit OfferRevoked event
+    e.events().publish((OFFER, symbol_short!("ORevoke")), 
+        (offer_id.clone())
+    );
 }
 
 

@@ -75,7 +75,7 @@ pub fn offer_create(
     if send_token_client.balance(&key.offeror.clone()) < transfer_amount {
         panic!("insufficient balance");
     }
-    if （send_token_client.allowance(e.current_contract_address() < transfer_amount) {
+    if send_token_client.allowance(&key.offeror.clone(), &contract.clone()) < transfer_amount {
         panic!("insufficient allowance");
     }
 
@@ -135,18 +135,17 @@ pub fn offer_accept(e: &Env,
 
     let fee_info = fee_get(&e);
     let fee_amount: i128 = calculate_fee(&fee_info.clone(), amount);
-
-    if recv_token_client.balance() < (amount + fee_amount) {
+    let contract = e.current_contract_address();
+    
+    if recv_token_client.balance(&acceptor) < (amount + fee_amount) {
         panic!("insufficient balance");
     }
-    if recv_token_client.allowance() < (amount + fee_amount) {
+    if recv_token_client.allowance(&acceptor, &contract.clone()) < (amount + fee_amount) {
         panic!("insufficient allowance");
     }
 
     // Compute the amount of send_token that acceptor can receive.
     let prop_send_amount = amount.checked_mul(offer.send_amount as i128).unwrap_optimized() / offer.recv_amount as i128;
-
-    let contract = e.current_contract_address();
 
     // Perform the trade in 3 `transfer` steps.
     // Note, that we don't need to verify any balances - the contract would
@@ -239,7 +238,7 @@ pub fn offer_close(e: &Env,
 
     // emit OfferRevoked event
     e.events().publish((OFFER, symbol_short!("ORevoke")), 
-        (offer_id.clone())
+        offer_id.clone()
     );
 }
 

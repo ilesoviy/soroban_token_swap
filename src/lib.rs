@@ -10,7 +10,7 @@ mod offer;
 
 
 use soroban_sdk::{
-    token, contract, contractimpl, Address, Env, BytesN
+    contract, contractimpl, Address, Env, BytesN
 };
 use crate::storage_types::{ FeeInfo };
 use crate::fee::{ fee_init, fee_set };
@@ -23,17 +23,17 @@ pub struct TokenSwap;
 
 #[contractimpl]
 impl TokenSwap {
-    pub fn init_fee(e: Env, fee_rate: u32, fee_wallet: Address) -> bool {
+    pub fn init_fee(e: Env, fee_rate: u32, fee_wallet: Address) {
         let fee_info: FeeInfo = FeeInfo {fee_rate, fee_wallet};
-        fee_init(&e, &fee_info)
+        fee_init(&e, &fee_info);
     }
 
-    pub fn allow_token(e: Env, token: Address) -> bool {
-        allow_set(&e, &token)
+    pub fn allow_token(e: Env, token: Address) {
+        allow_set(&e, &token);
     }
 
-    pub fn disallow_token(e: Env, token: Address) -> bool {
-        allow_reset(&e, &token)
+    pub fn disallow_token(e: Env, token: Address) {
+        allow_reset(&e, &token);
     }
 
     pub fn create_offer(

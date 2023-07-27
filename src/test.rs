@@ -56,14 +56,14 @@ fn test() {
     let send_token_id = send_token.0;
     let send_token_client = send_token.1;
     let send_token_admin_client = send_token.2;
-    send_token_admin_client.mint(&offeror, &(1000 * MUL_VAL));
+    send_token_admin_client.mint(&offeror.clone(), &(1000 * MUL_VAL));
     log!(&e, "send_token_id = {}", send_token_id);
     
     let recv_token = create_token_contract(&e, &token_admin);
     let recv_token_id = recv_token.0;
     let recv_token_client = recv_token.1;
     let recv_token_admin_client = recv_token.2;
-    recv_token_admin_client.mint(&acceptor, &(100 * MUL_VAL));
+    recv_token_admin_client.mint(&acceptor.clone(), &(100 * MUL_VAL));
     
     
     // init fee
@@ -71,11 +71,14 @@ fn test() {
     let fee_wallet = Address::random(&e);
 
     token_swap.init_fee(&fee_rate, &fee_wallet);
-
+    
 
     // allow tokens
     token_swap.allow_token(&send_token_id);
     token_swap.allow_token(&recv_token_id);
+
+    send_token_client.approve(&offeror.clone(), &token_swap.address.clone(), &(1000 * MUL_VAL), &200);
+    recv_token_client.approve(&acceptor.clone(), &token_swap.address.clone(), &(100 * MUL_VAL), &200);
     
     
     // Initial transaction 1 - create offer
@@ -153,17 +156,16 @@ fn test() {
         &(50 * MUL_VAL),
         &(10 * MUL_VAL)).is_err());
 
-    // trying to create an offer with different timestamp
-    // let timestamp2: u64 = /*e.ledger().timestamp()*/ timestamp + 127;
-    // log!(&e, "timestamp1 = {}, timestamp2 = {}", timestamp, timestamp2);
-    // let offer_id2: BytesN<32> = token_swap.create_offer(
-    //     &offeror,
-    //     &send_token_id,
-    //     &recv_token_id,
-    //     &timestamp2,
-    //     &(500 * MUL_VAL),
-    //     &(50 * MUL_VAL),
-    //     &(10 * MUL_VAL));
+    // trying to create an offer with different timestamp - fails due to insufficient balance
+    let timestamp2: u64 = timestamp + 127;
+    assert!(token_swap.try_create_offer(
+        &offeror,
+        &send_token_id,
+        &recv_token_id,
+        &timestamp2,
+        &(500 * MUL_VAL),
+        &(50 * MUL_VAL),
+        &(10 * MUL_VAL)).is_err());
     
     
     // Try accepting 9 recv_token for at least 10 recv_token - that wouldn't

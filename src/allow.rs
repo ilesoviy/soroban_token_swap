@@ -3,7 +3,7 @@ use soroban_sdk::{ log, Address, Env };
 use crate::storage_types::{ DataKey, };
 
 
-pub fn allow_set(e: &Env, token_addr: &Address) -> bool {
+pub fn allow_set(e: &Env, token_addr: &Address) {
     let key = DataKey::Allowance(token_addr.clone());
     
     if e.storage().instance().has(&key) && e.storage().instance().get::<_, bool>(&key).unwrap() {
@@ -11,17 +11,10 @@ pub fn allow_set(e: &Env, token_addr: &Address) -> bool {
         return;
     }
 
-    try {
-        e.storage().instance().set(&key, &true);
-        true
-    }
-    catch {
-        panic!("failed to set allowance");
-        false
-    }
+    e.storage().instance().set(&key, &true);
 }
 
-pub fn allow_reset(e: &Env, token_addr: &Address) -> bool {
+pub fn allow_reset(e: &Env, token_addr: &Address) {
     let key = DataKey::Allowance(token_addr.clone());
 
     if !e.storage().instance().has(&key) || !e.storage().instance().get::<_, bool>(&key).unwrap() {
@@ -29,14 +22,7 @@ pub fn allow_reset(e: &Env, token_addr: &Address) -> bool {
         return;
     }
 
-    try {
-        e.storage().instance().set(&key, &false);
-        true
-    }
-    catch {
-        panic!("failed to reset allowance");
-        false
-    }
+    e.storage().instance().set(&key, &false);
 }
 
 pub fn allow_get(e: &Env, token: &Address) -> bool {

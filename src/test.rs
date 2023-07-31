@@ -70,15 +70,15 @@ fn test() {
     let fee_rate = DEF_FEE_RATE;
     let fee_wallet = Address::random(&e);
 
-    token_swap.init_fee(&fee_rate, &fee_wallet);
+    token_swap.set_fee(&fee_rate, &fee_wallet);
     
 
     // allow tokens
     token_swap.allow_token(&send_token_id);
     token_swap.allow_token(&recv_token_id);
 
-    send_token_client.approve(&offeror.clone(), &token_swap.address.clone(), &(1000 * MUL_VAL), &200);
-    recv_token_client.approve(&acceptor.clone(), &token_swap.address.clone(), &(100 * MUL_VAL), &200);
+    send_token_client.approve(&offeror.clone(), &token_swap.address.clone(), &(1000 * MUL_VAL), &2000000);
+    recv_token_client.approve(&acceptor.clone(), &token_swap.address.clone(), &(100 * MUL_VAL), &2000000);
     
     
     // Initial transaction 1 - create offer
@@ -171,14 +171,14 @@ fn test() {
     // Try accepting 9 recv_token for at least 10 recv_token - that wouldn't
     // succeed because minimum recv amount is 10 recv_token.
     assert!(token_swap.try_accept_offer(
-        &offer_id, 
         &acceptor, 
+        &offer_id, 
         &(9 * MUL_VAL)).is_err());
     
     // acceptor accepts 10 recv_tokens.
     token_swap.accept_offer(
-        &offer_id,
         &acceptor,
+        &offer_id,
         &(10_i128 * MUL_VAL));
     
     assert_eq!(send_token_client.balance(&offeror), 500_i128 * MUL_VAL - 12500);
@@ -194,6 +194,7 @@ fn test() {
     
     // update (recv_amount, min_recv_amount) from (40, 10) to (80, 20)
     token_swap.update_offer(
+        &offeror,
         &offer_id,
         &(80_i128 * MUL_VAL),   // new recv_amount
         &(20_i128 * MUL_VAL)    // new min_recv_amount
@@ -202,8 +203,8 @@ fn test() {
     
     // acceptor accepts 40 recv_tokens.
     token_swap.accept_offer(
-        &offer_id, 
         &acceptor, 
+        &offer_id, 
         &(40 * MUL_VAL));
     
     assert_eq!(send_token_client.balance(&offeror), 500_i128 * MUL_VAL - 12500);
@@ -219,6 +220,7 @@ fn test() {
     
     // offeror closes offer
     token_swap.close_offer(
+        &offeror,
         &offer_id
     );
 

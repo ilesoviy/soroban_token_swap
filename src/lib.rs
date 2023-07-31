@@ -13,7 +13,7 @@ use soroban_sdk::{
     contract, contractimpl, Address, Env, BytesN
 };
 use crate::storage_types::{ FeeInfo };
-use crate::fee::{ fee_init, fee_set };
+use crate::fee::{ fee_set };
 use crate::allow::{ allow_set, allow_reset };
 use crate::offer::{ offer_create, offer_accept, offer_update, offer_close };
 
@@ -23,9 +23,9 @@ pub struct TokenSwap;
 
 #[contractimpl]
 impl TokenSwap {
-    pub fn init_fee(e: Env, fee_rate: u32, fee_wallet: Address) {
+    pub fn set_fee(e: Env, fee_rate: u32, fee_wallet: Address) {
         let fee_info: FeeInfo = FeeInfo {fee_rate, fee_wallet};
-        fee_init(&e, &fee_info);
+        fee_set(&e, &fee_info);
     }
 
     pub fn allow_token(e: Env, token: Address) {
@@ -50,25 +50,27 @@ impl TokenSwap {
     }
 
     pub fn accept_offer(e: Env, 
-        offer_id: BytesN<32>, 
         acceptor: Address, 
+        offer_id: BytesN<32>, 
         amount: i128
-    ) {
-        offer_accept(&e, &offer_id, &acceptor, amount)
+    ) -> i32 {
+        offer_accept(&e, &acceptor, &offer_id, amount)
     }
 
     pub fn update_offer(e: Env, 
+        offeror: Address,
         offer_id: BytesN<32>, 
         recv_amount: i128, 
         min_recv_amount: i128
-    ) {
-        offer_update(&e, &offer_id, recv_amount, min_recv_amount)
+    ) -> BytesN<32> {
+        offer_update(&e, &offeror, &offer_id, recv_amount, min_recv_amount)
     }
 
     pub fn close_offer(e: Env, 
+        offeror: Address,
         offer_id: BytesN<32>
     ) {
-        offer_close(&e, &offer_id)
+        offer_close(&e, &offeror, &offer_id)
     }
 }
 

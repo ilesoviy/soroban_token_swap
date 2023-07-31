@@ -37,10 +37,12 @@ pub fn offer_create(
     min_recv_amount: i128,
 ) -> BytesN<32> {
     if !fee_check(&e) {
-        panic!("fee wasn't set");
+        // panic!("fee wasn't set");
+        return BytesN::from_array(e, &[101; 32]);
     }
     if !allow_get(&e, &send_token.clone()) || !allow_get(&e, &recv_token.clone()) {
-        panic!("both tokens aren't allowed");
+        // panic!("both tokens aren't allowed");
+        return BytesN::from_array(e, &[102; 32]);
     }
 
     let key: OfferKey = OfferKey { 
@@ -53,42 +55,47 @@ pub fn offer_create(
     log!(&e, "offer_id = {}", offer_id);
 
     if e.storage().instance().has(&DataKey::RegOffers(offer_id.clone())) {
-        panic!("offer was already created");
+        // panic!("offer was already created");
+        return BytesN::from_array(e, &[103; 32]);
     }
     if send_amount == 0 || recv_amount == 0 {
-        panic!("zero amount is not allowed");
+        // panic!("zero amount is not allowed");
+        return BytesN::from_array(e, &[104; 32]);
     }
     if min_recv_amount > recv_amount {
-        panic!("min_recv_amount can't be greater than recv_amount");
+        // panic!("min_recv_amount can't be greater than recv_amount");
+        return BytesN::from_array(e, &[105; 32]);
     }
     
     // Authorize the `create` call by offeror to verify their identity.
-    key.offeror.clone().require_auth();
+    // offeror.require_auth();
 
     let fee_info = fee_get(&e);
     let fee_amount: i128 = calculate_fee(&fee_info.clone(), send_amount);
     let transfer_amount = send_amount + fee_amount;
     
     let contract = e.current_contract_address();
-    let send_token_client = token::Client::new(&e, &key.send_token.clone());
-    
-    if send_token_client.balance(&key.offeror.clone()) < transfer_amount {
-        panic!("insufficient balance");
+    let send_token_client = token::Client::new(&e, &send_token.clone());
+
+    if send_token_client.balance(&offeror) < transfer_amount {
+        // panic!("insufficient balance");
+        return BytesN::from_array(e, &[106; 32]);
     }
-    if send_token_client.allowance(&key.offeror.clone(), &contract.clone()) < transfer_amount {
-        panic!("insufficient allowance");
+    if send_token_client.allowance(&offeror, &contract) < transfer_amount {
+        // panic!("insufficient allowance");
+        return BytesN::from_array(e, &[107; 32]);
     }
 
-    send_token_client.transfer(&key.offeror.clone(), &contract, &(send_amount as i128));
-    send_token_client.transfer(&key.offeror.clone(), &fee_info.fee_wallet, &fee_amount);
+    send_token_client.transfer(&offeror, &contract, &(send_amount as i128));
+    send_token_client.transfer(&offeror, &fee_info.fee_wallet, &fee_amount);
 
     offer_write(
         &e,
         &offer_id,
         &OfferInfo {
-            offeror: key.offeror.clone(),
-            send_token: key.send_token.clone(),
-            recv_token: key.recv_token.clone(),
+            offeror: offeror.clone(),
+            send_token: send_token.clone(),
+            recv_token: recv_token.clone(),
             send_amount,
             recv_amount,
             min_recv_amount,
@@ -96,9 +103,14 @@ pub fn offer_create(
         },
     );
 
+    if !e.storage().instance().has(&DataKey::RegOffers(offer_id.clone())) {
+        // panic!("can't find offer");
+        return BytesN::from_array(e, &[117; 32]);
+    }
+
     // emit OfferCreated event
     e.events().publish((OFFER, symbol_short!("OCreate")), 
-        (key.offeror.clone(), key.send_token.clone(), key.recv_token.clone(), timestamp)
+        (offer_id.clone(), offeror.clone(), send_token.clone(), recv_token.clone(), send_amount, recv_amount, min_recv_amount, timestamp)
     );
 
     offer_id
@@ -107,27 +119,36 @@ pub fn offer_create(
 // Swaps `amount` of recv_token from acceptor for `send_token` amount calculated by the amount.
 // acceptor needs to authorize the `swap` call and internal `transfer` call to the contract address.
 pub fn offer_accept(e: &Env, 
-    offer_id: &BytesN<32>,
     acceptor: &Address, 
+    offer_id: &BytesN<32>,
     amount: i128
-) {
+) -> i32 {
+    if !e.storage().instance().has(&DataKey::RegOffers(offer_id.clone())) {
+        // panic!("can't find offer");
+        return 110;
+    }
+
     let mut offer = offer_load(&e, &offer_id);
 
     if !fee_check(&e) {
-        panic!("fee isn't set");
+        // panic!("fee isn't set");
+        return 111;
     }
     if offer.status != OfferStatus::ACTIVE {
-        panic!("offer not available");
+        // panic!("offer not available");
+        return 112;
     }
     if offer.recv_amount < amount {
-        panic!("amount is greater than max_recv_amount");
+        // panic!("amount is greater than max_recv_amount");
+        return 113;
     }
     if amount < offer.min_recv_amount {
-        panic!("amount must be more than min_recv_amount");
+        // panic!("amount must be more than min_recv_amount");
+        return 114;
     }
     
     // acceptor needs to authorize the trade.
-    acceptor.require_auth();
+    // acceptor.require_auth();
 
     // Load the offer and prepare the token clients to do the trade.
     let send_token_client = token::Client::new(&e, &offer.send_token);
@@ -138,10 +159,12 @@ pub fn offer_accept(e: &Env,
     let contract = e.current_contract_address();
     
     if recv_token_client.balance(&acceptor) < (amount + fee_amount) {
-        panic!("insufficient balance");
+        // panic!("insufficient balance");
+        return 115;
     }
     if recv_token_client.allowance(&acceptor, &contract.clone()) < (amount + fee_amount) {
-        panic!("insufficient allowance");
+        // panic!("insufficient allowance");
+        return 116;
     }
 
     // Compute the amount of send_token that acceptor can receive.
@@ -171,6 +194,9 @@ pub fn offer_accept(e: &Env,
     if offer.recv_amount == 0 {
         offer.status = OfferStatus::COMPLETE;
         // emit OfferCompleted event
+        e.events().publish((OFFER, symbol_short!("OComplete")), 
+            offer_id.clone()
+        );
     }
     else if offer.recv_amount < offer.min_recv_amount {
         offer.min_recv_amount = offer.recv_amount;
@@ -180,56 +206,82 @@ pub fn offer_accept(e: &Env,
 
     // emit OfferAccepted event
     e.events().publish((OFFER, symbol_short!("OAccept")), 
-        (offer_id.clone(), acceptor.clone(), amount)
+        (acceptor.clone(), offer_id.clone(), amount)
     );
+
+    0
 }
 
 // Updates offer
 // Must be authorized by offeror.
 pub fn offer_update(e: &Env, 
-    offer_id: &BytesN<32>,
+    offeror: &Address, 
+    offer_id: &BytesN<32>, 
     recv_amount: i128, 
     min_recv_amount: i128
-) {
+// ) -> i32 {
+) -> BytesN<32> {
     if recv_amount == 0 {
-        panic!("zero amount is not allowed");
+        // panic!("zero amount is not allowed");
+        return BytesN::from_array(e, &[121; 32]);
     }
     if min_recv_amount > recv_amount {
-        panic!("min_recv_amount can't be greater than recv_amount");
+        // panic!("min_recv_amount can't be greater than recv_amount");
+        return BytesN::from_array(e, &[122; 32]);
+    }
+
+    if !e.storage().instance().has(&DataKey::RegOffers(offer_id.clone())) {
+        // panic!("can't find offer");
+        return BytesN::from_array(e, &[123; 32]);
     }
 
     let mut offer = offer_load(&e, &offer_id);
 
+    if offer.offeror != offeror.clone() {
+        // panic!("invalid offeror");
+        return BytesN::from_array(e, &[124; 32]);
+    }
     if offer.status != OfferStatus::ACTIVE {
-        panic!("offer not available");
+        // panic!("offer not available");
+        return BytesN::from_array(e, &[125; 32]);
     }
 
-    offer.offeror.require_auth();
+    // offeror.clone().require_auth();
     offer.recv_amount = recv_amount;
     offer.min_recv_amount = min_recv_amount;
     offer_write(&e, offer_id, &offer);
 
     // emit OfferUpdated event
     e.events().publish((OFFER, symbol_short!("OUpdate")), 
-        (offer_id.clone(), recv_amount, min_recv_amount)
+        (offeror.clone(), offer_id.clone(), recv_amount, min_recv_amount)
     );
+
+    BytesN::from_array(e, &[0; 32])
 }
 
 // Cancel offer
 // Must be authorized by offeror.
 pub fn offer_close(e: &Env, 
+    offeror: &Address, 
     offer_id: &BytesN<32>
 ) {
+    if !e.storage().instance().has(&DataKey::RegOffers(offer_id.clone())) {
+        panic!("can't find offer");
+    }
+
     let mut offer = offer_load(&e, &offer_id);
 
+    if offer.offeror != offeror.clone() {
+        panic!("invalid offeror");
+    }
     if offer.status != OfferStatus::ACTIVE {
         panic!("offer not available");
     }
 
-    offer.offeror.require_auth();
+    // offeror.clone().require_auth();
     token::Client::new(&e, &offer.send_token).transfer(
         &e.current_contract_address(),
-        &offer.offeror,
+        &offeror,
         &offer.send_amount,
     );
 
@@ -238,7 +290,7 @@ pub fn offer_close(e: &Env,
 
     // emit OfferRevoked event
     e.events().publish((OFFER, symbol_short!("ORevoke")), 
-        offer_id.clone()
+        (offeror.clone(), offer_id.clone())
     );
 }
 
@@ -249,4 +301,5 @@ fn offer_load(e: &Env, key: &BytesN<32>) -> OfferInfo {
 
 fn offer_write(e: &Env, key: &BytesN<32>, offer: &OfferInfo) {
     e.storage().instance().set(&DataKey::RegOffers(key.clone()), offer);
+    e.storage().instance().bump(200000000);
 }

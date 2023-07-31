@@ -23,6 +23,7 @@ pub fn allow_reset(e: &Env, token_addr: &Address) {
     }
 
     e.storage().instance().set(&key, &false);
+    e.storage().instance().bump(2000000);
 }
 
 pub fn allow_get(e: &Env, token: &Address) -> bool {

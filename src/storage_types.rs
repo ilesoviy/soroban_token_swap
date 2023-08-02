@@ -34,10 +34,10 @@ pub struct OfferInfo {
     pub recv_token: Address,
     
     // offeror-defined amount of the send token
-    pub send_amount: i128,
+    pub send_amount: u64,
     // offeror-defined amount of the recv token
-    pub recv_amount: i128,
-    pub min_recv_amount: i128,
+    pub recv_amount: u64,
+    pub min_recv_amount: u64,
 
     pub status: OfferStatus
 }
@@ -48,7 +48,7 @@ pub struct OfferKey {
     pub offeror: Address,
     pub send_token: Address,
     pub recv_token: Address,
-    pub timestamp: u64,
+    pub timestamp: u32,
 }
 
 
@@ -57,5 +57,7 @@ pub struct OfferKey {
 pub enum DataKey {
     FEE,
     Allowance(Address),
-    RegOffers(BytesN<32>),
+    OFFER_COUNT,
+    RegOffers(u32),
+    ERROR_CODE,
 }

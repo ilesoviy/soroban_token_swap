@@ -43,7 +43,7 @@ fn test() {
     let token_admin = Address::random(&e);
     let offeror = Address::random(&e);
     let acceptor = Address::random(&e);
-    const MUL_VAL: i128 = i128::pow(10, TOKEN_DECIMALS);
+    const MUL_VAL: u64 = u64::pow(10, TOKEN_DECIMALS);
     
     
     // create contract
@@ -83,7 +83,7 @@ fn test() {
     
     // Initial transaction 1 - create offer
     // 500 send_tokens : 50 recv_tokens (10 min_recv_tokens)
-    let timestamp: u64 = e.ledger().timestamp();
+    let timestamp: u32 = e.ledger().timestamp();
     
     let offer_id: BytesN<32> = token_swap.create_offer(
         &offeror,

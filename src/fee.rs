@@ -27,5 +27,5 @@ pub fn fee_set(e: &Env, fee_info: &FeeInfo) {
     let key = DataKey::FEE;
 
     e.storage().instance().set(&key, fee_info);
-    e.storage().instance().bump(2000000);
+    e.storage().instance().bump(200000000);
 }

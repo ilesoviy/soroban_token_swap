@@ -12,10 +12,10 @@ mod offer;
 use soroban_sdk::{
     contract, contractimpl, Address, Env, BytesN
 };
-use crate::storage_types::{ FeeInfo };
+use crate::storage_types::{ FeeInfo, DataKey };
 use crate::fee::{ fee_set };
 use crate::allow::{ allow_set, allow_reset };
-use crate::offer::{ offer_create, offer_accept, offer_update, offer_close };
+use crate::offer::{ error, offer_count, offer_create, offer_accept, offer_update, offer_close, offer_balances };
 
 
 #[contract]
@@ -36,41 +36,77 @@ impl TokenSwap {
         allow_reset(&e, &token);
     }
 
-    pub fn create_offer(
-        e: Env,
-        offeror: Address,
-        send_token: Address,
-        recv_token: Address,
-        timestamp: u64,
-        send_amount: i128,
-        recv_amount: i128,
-        min_recv_amount: i128,
-    ) -> BytesN<32> {
-        offer_create(&e, &offeror, &send_token, &recv_token, timestamp, send_amount, recv_amount, min_recv_amount)
+    pub fn get_error(e: Env) -> u32 {
+        error(&e)
+    }
+
+    pub fn count_offers(e: Env) -> u32 {
+        offer_count(&e)
+    }
+
+    pub fn create_offer(e: Env, 
+        offeror: Address, 
+        send_token: Address, 
+        recv_token: Address, 
+        timestamp: u32, 
+        send_amount: u64, 
+        recv_amount: u64, 
+        min_recv_amount: u64
+    ) -> u32 {
+        let ret: u32 = offer_create(&e, &offeror, &send_token, &recv_token, timestamp, send_amount, recv_amount, min_recv_amount);
+
+        e.storage().instance().set(&DataKey::ERROR_CODE, &ret);
+        e.storage().instance().bump(200000000);
+
+        ret
     }
 
     pub fn accept_offer(e: Env, 
         acceptor: Address, 
-        offer_id: BytesN<32>, 
-        amount: i128
-    ) -> i32 {
-        offer_accept(&e, &acceptor, &offer_id, amount)
+        offer_id: u32, 
+        amount: u64
+    ) -> u32 {
+        let ret: u32 = offer_accept(&e, &acceptor, offer_id, amount);
+
+        e.storage().instance().set(&DataKey::ERROR_CODE, &ret);
+        e.storage().instance().bump(200000000);
+
+        ret
     }
 
     pub fn update_offer(e: Env, 
-        offeror: Address,
-        offer_id: BytesN<32>, 
-        recv_amount: i128, 
-        min_recv_amount: i128
-    ) -> BytesN<32> {
-        offer_update(&e, &offeror, &offer_id, recv_amount, min_recv_amount)
+        offeror: Address, 
+        offer_id: u32, 
+        recv_amount: u64, 
+        min_recv_amount: u64
+    ) -> u32 {
+        let ret: u32 = offer_update(&e, &offeror, offer_id, recv_amount, min_recv_amount);
+
+        e.storage().instance().set(&DataKey::ERROR_CODE, &ret);
+        e.storage().instance().bump(200000000);
+
+        ret
     }
 
     pub fn close_offer(e: Env, 
         offeror: Address,
-        offer_id: BytesN<32>
-    ) {
-        offer_close(&e, &offeror, &offer_id)
+        offer_id: u32
+    ) -> u32 {
+        let ret: u32 = offer_close(&e, &offeror, offer_id);
+
+        e.storage().instance().set(&DataKey::ERROR_CODE, &ret);
+        e.storage().instance().bump(200000000);
+
+        ret
+    }
+
+    pub fn check_balances(e: Env, 
+        offeror: Address, 
+        acceptor: Address, 
+        send_token: Address, 
+        recv_token: Address
+    ) -> (u64, u64, u64, u64) {
+        offer_balances(&e, &offeror, &acceptor, &send_token, &recv_token)
     }
 }
 

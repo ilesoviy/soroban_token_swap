@@ -310,16 +310,14 @@ pub fn offer_close(e: &Env,
 
 // Check balances
 pub fn offer_balances(e: &Env, 
-    offeror: &Address, 
-    acceptor: &Address, 
+    account: &Address, 
     send_token: &Address, 
     recv_token: &Address
-) -> (u64, u64, u64, u64) {
+) -> (u64, u64) {
     let send_token_client = token::Client::new(e, send_token);
     let recv_token_client = token::Client::new(e, recv_token);
 
-    (send_token_client.balance(offeror) as u64, recv_token_client.balance(offeror) as u64, 
-        send_token_client.balance(acceptor) as u64, recv_token_client.balance(acceptor) as u64)
+    (send_token_client.balance(account) as u64, recv_token_client.balance(account) as u64)
 }
 
 fn offer_load(e: &Env, key: u32) -> OfferInfo {

@@ -101,12 +101,11 @@ impl TokenSwap {
     }
 
     pub fn check_balances(e: Env, 
-        offeror: Address, 
-        acceptor: Address, 
+        account: Address, 
         send_token: Address, 
         recv_token: Address
-    ) -> (u64, u64, u64, u64) {
-        offer_balances(&e, &offeror, &acceptor, &send_token, &recv_token)
+    ) -> (u64, u64) {
+        offer_balances(&e, &account, &send_token, &recv_token)
     }
 }
 

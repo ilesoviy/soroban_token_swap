@@ -1,8 +1,8 @@
 const OFFER: Symbol = symbol_short!("OFFER");
 
 use soroban_sdk::{
-    log, token, unwrap::UnwrapOptimized, Address, Env, symbol_short, BytesN, Symbol, 
-    xdr::{ToXdr}
+    log, token, unwrap::UnwrapOptimized, Address, Env, symbol_short, /* BytesN, */ Symbol, 
+    /* xdr::{ToXdr} */
 };
 use crate::storage_types::{ FEE_DECIMALS, FeeInfo, OfferStatus, OfferInfo, DataKey };
 use crate::fee::{ fee_check, fee_get };
@@ -27,11 +27,11 @@ fn calculate_fee(fee_info: &FeeInfo, amount: u64) -> u64 {
 pub fn error(
     e: &Env
 ) -> u32 {
-    if !e.storage().instance().has(&DataKey::ERROR_CODE) {
+    if !e.storage().instance().has(&DataKey::ErrorCode) {
         return 1000;
     }
 
-    let err_code: u32 = e.storage().instance().get(&DataKey::ERROR_CODE).unwrap_or(0);
+    let err_code: u32 = e.storage().instance().get(&DataKey::ErrorCode).unwrap_or(0);
     err_code
 
     // 1001
@@ -40,7 +40,7 @@ pub fn error(
 pub fn offer_count(
     e: &Env
 ) -> u32 {
-    let offer_count: u32 = e.storage().instance().get(&DataKey::OFFER_COUNT).unwrap_or(0);
+    let offer_count: u32 = e.storage().instance().get(&DataKey::OfferCount).unwrap_or(0);
     offer_count
 }
 
@@ -65,7 +65,7 @@ pub fn offer_create(
         return 102;
     }
 
-    let offer_count: u32 = e.storage().instance().get(&DataKey::OFFER_COUNT).unwrap_or(0);
+    let offer_count: u32 = e.storage().instance().get(&DataKey::OfferCount).unwrap_or(0);
     let offer_id: u32 = offer_count;
     log!(e, "offer_id = {}", offer_id);
 
@@ -114,7 +114,7 @@ pub fn offer_create(
         },
     );
     let new_offer_count: u32 = offer_count + 1;
-    e.storage().instance().set(&DataKey::OFFER_COUNT, &new_offer_count);
+    e.storage().instance().set(&DataKey::OfferCount, &new_offer_count);
     e.storage().instance().bump(200000000);
 
     // emit OfferCreated event

@@ -1,4 +1,4 @@
-use soroban_sdk::{ contracttype, Address, BytesN };
+use soroban_sdk::{ contracttype, Address/* , BytesN */ };
 
 
 pub(crate) const DEF_FEE_RATE: u32 = 25;   // default fee_rate is 0.25%
@@ -57,7 +57,7 @@ pub struct OfferKey {
 pub enum DataKey {
     FEE,
     Allowance(Address),
-    OFFER_COUNT,
+    OfferCount,
     RegOffers(u32),
-    ERROR_CODE,
+    ErrorCode,
 }

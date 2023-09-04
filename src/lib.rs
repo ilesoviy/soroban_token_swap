@@ -10,7 +10,7 @@ mod offer;
 
 
 use soroban_sdk::{
-    contract, contractimpl, Address, Env, BytesN
+    contract, contractimpl, Address, Env, /* BytesN */
 };
 use crate::storage_types::{ FeeInfo, DataKey };
 use crate::fee::{ fee_set };
@@ -55,7 +55,7 @@ impl TokenSwap {
     ) -> u32 {
         let ret: u32 = offer_create(&e, &offeror, &send_token, &recv_token, timestamp, send_amount, recv_amount, min_recv_amount);
 
-        e.storage().instance().set(&DataKey::ERROR_CODE, &ret);
+        e.storage().instance().set(&DataKey::ErrorCode, &ret);
         e.storage().instance().bump(200000000);
 
         ret
@@ -68,7 +68,7 @@ impl TokenSwap {
     ) -> u32 {
         let ret: u32 = offer_accept(&e, &acceptor, offer_id, amount);
 
-        e.storage().instance().set(&DataKey::ERROR_CODE, &ret);
+        e.storage().instance().set(&DataKey::ErrorCode, &ret);
         e.storage().instance().bump(200000000);
 
         ret
@@ -82,7 +82,7 @@ impl TokenSwap {
     ) -> u32 {
         let ret: u32 = offer_update(&e, &offeror, offer_id, recv_amount, min_recv_amount);
 
-        e.storage().instance().set(&DataKey::ERROR_CODE, &ret);
+        e.storage().instance().set(&DataKey::ErrorCode, &ret);
         e.storage().instance().bump(200000000);
 
         ret
@@ -94,7 +94,7 @@ impl TokenSwap {
     ) -> u32 {
         let ret: u32 = offer_close(&e, &offeror, offer_id);
 
-        e.storage().instance().set(&DataKey::ERROR_CODE, &ret);
+        e.storage().instance().set(&DataKey::ErrorCode, &ret);
         e.storage().instance().bump(200000000);
 
         ret

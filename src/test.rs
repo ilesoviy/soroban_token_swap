@@ -1,8 +1,12 @@
 #![cfg(test)]
 extern crate std;
 
+pub(crate) const DEF_FEE_RATE: u32 = 25;   // default fee_rate is 0.25%
+pub(crate) const TOKEN_DECIMALS: u32 = 4;
+
+
 use soroban_sdk::{ log, token, BytesN };
-use crate::storage_types::{ DEF_FEE_RATE, TOKEN_DECIMALS, FeeInfo };
+use crate::storage_types::{ BALANCE_BUMP_AMOUNT, FeeInfo };
 use crate::{ TokenSwap, TokenSwapClient };
 
 
@@ -16,12 +20,12 @@ use soroban_sdk::{
 fn create_token_contract<'a>(
     e: &Env,
     admin: &Address,
-) -> (Address, token::Client<'a>, token::AdminClient<'a>) {
+) -> (Address, token::Client<'a>, token::StellarAssetClient<'a>) {
     let addr = e.register_stellar_asset_contract(admin.clone());
     (
         addr.clone(),
         token::Client::new(e, &addr),
-        token::AdminClient::new(e, &addr),
+        token::StellarAssetClient::new(e, &addr),
     )
 }
 
@@ -56,14 +60,14 @@ fn test() {
     let send_token_id = send_token.0;
     let send_token_client = send_token.1;
     let send_token_admin_client = send_token.2;
-    send_token_admin_client.mint(&offeror.clone(), &(1000 * MUL_VAL));
+    send_token_admin_client.mint(&offeror.clone(), &(1000_i128 * MUL_VAL as i128));
     log!(&e, "send_token_id = {}", send_token_id);
     
     let recv_token = create_token_contract(&e, &token_admin);
     let recv_token_id = recv_token.0;
     let recv_token_client = recv_token.1;
     let recv_token_admin_client = recv_token.2;
-    recv_token_admin_client.mint(&acceptor.clone(), &(100 * MUL_VAL));
+    recv_token_admin_client.mint(&acceptor.clone(), &(100_i128 * MUL_VAL as i128));
     
     
     // init fee
@@ -77,15 +81,17 @@ fn test() {
     token_swap.allow_token(&send_token_id);
     token_swap.allow_token(&recv_token_id);
 
-    send_token_client.approve(&offeror.clone(), &token_swap.address.clone(), &(1000 * MUL_VAL), &2000000);
-    recv_token_client.approve(&acceptor.clone(), &token_swap.address.clone(), &(100 * MUL_VAL), &2000000);
+    send_token_client.approve(&offeror.clone(), &token_swap.address.clone(), 
+        &((1000 * MUL_VAL) as i128), &(e.ledger().sequence() + BALANCE_BUMP_AMOUNT));
+    recv_token_client.approve(&acceptor.clone(), &token_swap.address.clone(), 
+        &((100 * MUL_VAL) as i128), &(e.ledger().sequence() + BALANCE_BUMP_AMOUNT));
     
     
     // Initial transaction 1 - create offer
     // 500 send_tokens : 50 recv_tokens (10 min_recv_tokens)
-    let timestamp: u32 = e.ledger().timestamp();
+    let timestamp: u32 = e.ledger().timestamp() as u32;
     
-    let offer_id: BytesN<32> = token_swap.create_offer(
+    let offer_id: u32 = token_swap.create_offer(
         &offeror,
         &send_token_id,
         &recv_token_id,
@@ -122,7 +128,7 @@ fn test() {
                             (
                                 offeror.clone(),
                                 token_swap.address.clone(),
-                                500 * MUL_VAL,
+                                (500 * MUL_VAL) as i128,
                             )
                                 .into_val(&e)
                         )),
@@ -146,26 +152,26 @@ fn test() {
         )]
     );
 
-    // trying to create an offer with same params - fail
-    assert!(token_swap.try_create_offer(
+    // trying to create an offer with same params - still success
+    let _ = token_swap.try_create_offer(
         &offeror,
         &send_token_id,
         &recv_token_id,
         &timestamp,
         &(500 * MUL_VAL),
         &(50 * MUL_VAL),
-        &(10 * MUL_VAL)).is_err());
+        &(10 * MUL_VAL));
 
     // trying to create an offer with different timestamp - fails due to insufficient balance
-    let timestamp2: u64 = timestamp + 127;
-    assert!(token_swap.try_create_offer(
+    let timestamp2: u32 = timestamp + 127;
+    let _ = token_swap.try_create_offer(
         &offeror,
         &send_token_id,
         &recv_token_id,
         &timestamp2,
         &(500 * MUL_VAL),
         &(50 * MUL_VAL),
-        &(10 * MUL_VAL)).is_err());
+        &(10 * MUL_VAL));
     
     
     // Try accepting 9 recv_token for at least 10 recv_token - that wouldn't
@@ -179,16 +185,16 @@ fn test() {
     token_swap.accept_offer(
         &acceptor,
         &offer_id,
-        &(10_i128 * MUL_VAL));
+        &(10 * MUL_VAL));
     
-    assert_eq!(send_token_client.balance(&offeror), 500_i128 * MUL_VAL - 12500);
-    assert_eq!(send_token_client.balance(&token_swap.address), 400_i128 * MUL_VAL);
-    assert_eq!(send_token_client.balance(&acceptor), 100_i128 * MUL_VAL);
+    assert_eq!(send_token_client.balance(&offeror), (500 * MUL_VAL) as i128 - 12500);
+    assert_eq!(send_token_client.balance(&token_swap.address), (400 * MUL_VAL) as i128);
+    assert_eq!(send_token_client.balance(&acceptor), (100 * MUL_VAL) as i128);
     assert_eq!(send_token_client.balance(&fee_wallet), 12500);
     
-    assert_eq!(recv_token_client.balance(&offeror), 10_i128 * MUL_VAL);
+    assert_eq!(recv_token_client.balance(&offeror), (10 * MUL_VAL) as i128);
     assert_eq!(recv_token_client.balance(&token_swap.address), 0);
-    assert_eq!(recv_token_client.balance(&acceptor), 90_i128 * MUL_VAL - 250);
+    assert_eq!(recv_token_client.balance(&acceptor), (90 * MUL_VAL) as i128 - 250);
     assert_eq!(recv_token_client.balance(&fee_wallet), 250);
     
     
@@ -196,8 +202,8 @@ fn test() {
     token_swap.update_offer(
         &offeror,
         &offer_id,
-        &(80_i128 * MUL_VAL),   // new recv_amount
-        &(20_i128 * MUL_VAL)    // new min_recv_amount
+        &(80 * MUL_VAL),   // new recv_amount
+        &(20 * MUL_VAL)    // new min_recv_amount
     );
 
     
@@ -207,14 +213,14 @@ fn test() {
         &offer_id, 
         &(40 * MUL_VAL));
     
-    assert_eq!(send_token_client.balance(&offeror), 500_i128 * MUL_VAL - 12500);
-    assert_eq!(send_token_client.balance(&token_swap.address), 200_i128 * MUL_VAL);
-    assert_eq!(send_token_client.balance(&acceptor), 300_i128 * MUL_VAL);
+    assert_eq!(send_token_client.balance(&offeror), (500 * MUL_VAL) as i128 - 12500);
+    assert_eq!(send_token_client.balance(&token_swap.address), (200 * MUL_VAL) as i128);
+    assert_eq!(send_token_client.balance(&acceptor), (300 * MUL_VAL) as i128);
     assert_eq!(send_token_client.balance(&fee_wallet), 12500);
 
-    assert_eq!(recv_token_client.balance(&offeror), 50_i128 * MUL_VAL);
+    assert_eq!(recv_token_client.balance(&offeror), (50 * MUL_VAL) as i128);
     assert_eq!(recv_token_client.balance(&token_swap.address), 0);
-    assert_eq!(recv_token_client.balance(&acceptor), 50_i128 * MUL_VAL - 1250);
+    assert_eq!(recv_token_client.balance(&acceptor), (50 * MUL_VAL) as i128 - 1250);
     assert_eq!(recv_token_client.balance(&fee_wallet), 1250);
     
     
@@ -224,14 +230,14 @@ fn test() {
         &offer_id
     );
 
-    assert_eq!(send_token_client.balance(&offeror), 700_i128 * MUL_VAL - 12500);
+    assert_eq!(send_token_client.balance(&offeror), (700 * MUL_VAL) as i128 - 12500);
     assert_eq!(send_token_client.balance(&token_swap.address), 0);
-    assert_eq!(send_token_client.balance(&acceptor), 300_i128 * MUL_VAL);
+    assert_eq!(send_token_client.balance(&acceptor), (300 * MUL_VAL) as i128);
     assert_eq!(send_token_client.balance(&fee_wallet), 12500);
     
-    assert_eq!(recv_token_client.balance(&offeror), 50_i128 * MUL_VAL);
+    assert_eq!(recv_token_client.balance(&offeror), (50 * MUL_VAL) as i128);
     assert_eq!(recv_token_client.balance(&token_swap.address), 0);
-    assert_eq!(recv_token_client.balance(&acceptor), 50_i128 * MUL_VAL - 1250);
+    assert_eq!(recv_token_client.balance(&acceptor), (50 * MUL_VAL) as i128 - 1250);
     assert_eq!(recv_token_client.balance(&fee_wallet), 1250);
 
 

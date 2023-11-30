@@ -4,8 +4,10 @@ use soroban_sdk::{
     log, token, unwrap::UnwrapOptimized, Address, Env, symbol_short, /* BytesN, */ Symbol, 
     /* xdr::{ToXdr} */
 };
-use crate::storage_types::{ FEE_DECIMALS, FeeInfo, OfferStatus, OfferInfo, DataKey };
-use crate::fee::{ fee_check, fee_get };
+use crate::storage_types::{ INSTANCE_LIFETIME_THRESHOLD, INSTANCE_BUMP_AMOUNT, BALANCE_BUMP_AMOUNT, 
+    OfferStatus, OfferInfo, DataKey
+};
+use crate::fee::{ fee_check, fee_get, calculate_fee };
 use crate::allow::{ allow_get };
 
 
@@ -20,9 +22,6 @@ How this contract should be used:
    and `send_token` to the offeror and acceptor respectively.
 4. Offeror may call `close` to claim any remaining `send_token` balance.
 */
-fn calculate_fee(fee_info: &FeeInfo, amount: u64) -> u64 {
-    amount * (fee_info.fee_rate as u64) / (u64::pow(10, FEE_DECIMALS))
-}
 
 pub fn error(
     e: &Env
@@ -79,10 +78,10 @@ pub fn offer_create(
     }
     
     // Authorize the `create` call by offeror to verify their identity.
-    // offeror.require_auth();
+    offeror.require_auth();
 
     let fee_info = fee_get(e);
-    let fee_amount: u64 = calculate_fee(&fee_info.clone(), send_amount);
+    let fee_amount: u64 = calculate_fee(e, &fee_info.clone(), send_amount);
     let transfer_amount = send_amount + fee_amount;
     
     let contract = e.current_contract_address();
@@ -93,7 +92,8 @@ pub fn offer_create(
         return 106;
     }
     if send_token_client.allowance(&offeror, &contract) < (transfer_amount as i128) {
-        // panic!("insufficient allowance");
+        // panic!(e, "insufficient creator's allowance");
+        send_token_client.approve(&offeror, &contract, &(transfer_amount as i128), &(e.ledger().sequence() + BALANCE_BUMP_AMOUNT));
         return 107;
     }
 
@@ -115,7 +115,7 @@ pub fn offer_create(
     );
     let new_offer_count: u32 = offer_count + 1;
     e.storage().instance().set(&DataKey::OfferCount, &new_offer_count);
-    e.storage().instance().bump(200000000);
+    e.storage().instance().bump(INSTANCE_LIFETIME_THRESHOLD, INSTANCE_BUMP_AMOUNT);
 
     // emit OfferCreated event
     e.events().publish((OFFER, symbol_short!("OCreate")), 
@@ -148,23 +148,23 @@ pub fn offer_accept(e: &Env,
         return 112;
     }
     if offer.recv_amount < amount {
-        // panic!("amount is greater than max_recv_amount");
-        return 113;
+        panic!("amount is greater than max_recv_amount");
+        // return 113;
     }
     if amount < offer.min_recv_amount {
-        // panic!("amount must be more than min_recv_amount");
-        return 114;
+        panic!("amount must be more than min_recv_amount");
+        // return 114;
     }
     
     // acceptor needs to authorize the trade.
-    // acceptor.require_auth();
+    acceptor.require_auth();
 
     // Load the offer and prepare the token clients to do the trade.
     let send_token_client = token::Client::new(e, &offer.send_token);
     let recv_token_client = token::Client::new(e, &offer.recv_token);
 
     let fee_info = fee_get(e);
-    let fee_amount: u64 = calculate_fee(&fee_info.clone(), amount);
+    let fee_amount: u64 = calculate_fee(e, &fee_info.clone(), amount);
     let contract = e.current_contract_address();
     
     if recv_token_client.balance(&acceptor) < (amount + fee_amount) as i128 {
@@ -173,6 +173,7 @@ pub fn offer_accept(e: &Env,
     }
     if recv_token_client.allowance(&acceptor, &contract.clone()) < (amount + fee_amount) as i128 {
         // panic!("insufficient allowance");
+        recv_token_client.approve(&acceptor, &contract, &((amount + fee_amount) as i128), &(e.ledger().sequence() + BALANCE_BUMP_AMOUNT));
         return 116;
     }
 
@@ -255,7 +256,8 @@ pub fn offer_update(e: &Env,
         return 125;
     }
 
-    // offeror.clone().require_auth();
+    offeror.clone().require_auth();
+
     offer.recv_amount = recv_amount;
     offer.min_recv_amount = min_recv_amount;
     offer_write(e, offer_id, &offer);
@@ -290,7 +292,8 @@ pub fn offer_close(e: &Env,
         return 133;
     }
 
-    // offeror.clone().require_auth();
+    offeror.clone().require_auth();
+    
     token::Client::new(e, &offer.send_token).transfer(
         &e.current_contract_address(),
         &offeror,
@@ -320,11 +323,11 @@ pub fn offer_balances(e: &Env,
     (send_token_client.balance(account) as u64, recv_token_client.balance(account) as u64)
 }
 
-fn offer_load(e: &Env, key: u32) -> OfferInfo {
+pub fn offer_load(e: &Env, key: u32) -> OfferInfo {
     e.storage().instance().get(&DataKey::RegOffers(key)).unwrap()
 }
 
 fn offer_write(e: &Env, key: u32, offer: &OfferInfo) {
     e.storage().instance().set(&DataKey::RegOffers(key), offer);
-    e.storage().instance().bump(200000000);
+    // e.storage().instance().bump(INSTANCE_LIFETIME_THRESHOLD, INSTANCE_BUMP_AMOUNT);
 }

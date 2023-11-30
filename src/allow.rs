@@ -1,6 +1,8 @@
 use soroban_sdk::{ log, Address, Env };
 
-use crate::storage_types::{ DataKey, };
+use crate::storage_types::{ /* INSTANCE_LIFETIME_THRESHOLD, INSTANCE_BUMP_AMOUNT, */ 
+    DataKey
+};
 
 
 pub fn allow_set(e: &Env, token_addr: &Address) {
@@ -23,7 +25,7 @@ pub fn allow_reset(e: &Env, token_addr: &Address) {
     }
 
     e.storage().instance().set(&key, &false);
-    e.storage().instance().bump(200000000);
+    // e.storage().instance().bump(INSTANCE_LIFETIME_THRESHOLD, INSTANCE_BUMP_AMOUNT);
 }
 
 pub fn allow_get(e: &Env, token: &Address) -> bool {

@@ -1,9 +1,12 @@
 use soroban_sdk::{ contracttype, Address/* , BytesN */ };
 
 
-pub(crate) const DEF_FEE_RATE: u32 = 25;   // default fee_rate is 0.25%
 pub(crate) const FEE_DECIMALS: u32 = 4;
-pub(crate) const TOKEN_DECIMALS: u32 = 4;
+
+pub(crate) const DAY_IN_LEDGERS: u32 = 17280;
+pub(crate) const INSTANCE_BUMP_AMOUNT: u32 = 7 * DAY_IN_LEDGERS; // 7 days
+pub(crate) const INSTANCE_LIFETIME_THRESHOLD: u32 = INSTANCE_BUMP_AMOUNT - DAY_IN_LEDGERS; // 6 days
+pub(crate) const BALANCE_BUMP_AMOUNT: u32 = 30 * DAY_IN_LEDGERS; // 30 days
 
 
 #[derive(Clone)]
@@ -16,6 +19,7 @@ pub struct FeeInfo {
 #[derive(Clone, Copy, PartialEq)]
 #[contracttype]
 pub enum OfferStatus {
+    INIT = 0,
     ACTIVE = 1,
     COMPLETE = 2,
     CANCEL = 3

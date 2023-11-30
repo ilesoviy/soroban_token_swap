@@ -12,10 +12,10 @@ mod offer;
 use soroban_sdk::{
     contract, contractimpl, Address, Env, /* BytesN */
 };
-use crate::storage_types::{ FeeInfo, DataKey };
-use crate::fee::{ fee_set };
+use crate::storage_types::{ FeeInfo/* , DataKey */ };
+use crate::fee::{ fee_set, fee_get };
 use crate::allow::{ allow_set, allow_reset };
-use crate::offer::{ error, offer_count, offer_create, offer_accept, offer_update, offer_close, offer_balances };
+use crate::offer::{ error, offer_count, offer_create, offer_accept, offer_update, offer_close, offer_load, offer_balances };
 
 
 #[contract]
@@ -26,6 +26,11 @@ impl TokenSwap {
     pub fn set_fee(e: Env, fee_rate: u32, fee_wallet: Address) {
         let fee_info: FeeInfo = FeeInfo {fee_rate, fee_wallet};
         fee_set(&e, &fee_info);
+    }
+
+    pub fn get_fee(e: Env) -> (u32, Address) {
+        let fee_info: FeeInfo = fee_get(&e);
+        (fee_info.fee_rate, fee_info.fee_wallet)
     }
 
     pub fn allow_token(e: Env, token: Address) {
@@ -55,9 +60,6 @@ impl TokenSwap {
     ) -> u32 {
         let ret: u32 = offer_create(&e, &offeror, &send_token, &recv_token, timestamp, send_amount, recv_amount, min_recv_amount);
 
-        e.storage().instance().set(&DataKey::ErrorCode, &ret);
-        e.storage().instance().bump(200000000);
-
         ret
     }
 
@@ -67,9 +69,6 @@ impl TokenSwap {
         amount: u64
     ) -> u32 {
         let ret: u32 = offer_accept(&e, &acceptor, offer_id, amount);
-
-        e.storage().instance().set(&DataKey::ErrorCode, &ret);
-        e.storage().instance().bump(200000000);
 
         ret
     }
@@ -82,9 +81,6 @@ impl TokenSwap {
     ) -> u32 {
         let ret: u32 = offer_update(&e, &offeror, offer_id, recv_amount, min_recv_amount);
 
-        e.storage().instance().set(&DataKey::ErrorCode, &ret);
-        e.storage().instance().bump(200000000);
-
         ret
     }
 
@@ -94,10 +90,18 @@ impl TokenSwap {
     ) -> u32 {
         let ret: u32 = offer_close(&e, &offeror, offer_id);
 
-        e.storage().instance().set(&DataKey::ErrorCode, &ret);
-        e.storage().instance().bump(200000000);
-
         ret
+    }
+
+    pub fn load_offer(e: Env, 
+        offer_id: u32
+    ) -> (Address, Address, Address, u64, u64, u64, u32) {
+        let offer_info = offer_load(&e, offer_id);
+        (offer_info.offeror, 
+            offer_info.send_token, offer_info.recv_token, 
+            offer_info.send_amount, offer_info.recv_amount, offer_info.min_recv_amount, 
+            offer_info.status as u32
+        )
     }
 
     pub fn check_balances(e: Env, 

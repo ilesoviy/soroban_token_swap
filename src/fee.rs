@@ -1,5 +1,7 @@
 use soroban_sdk::{ Env };
-use crate::storage_types::{ DataKey, FeeInfo };
+use crate::storage_types::{ FEE_DECIMALS, /* INSTANCE_LIFETIME_THRESHOLD, INSTANCE_BUMP_AMOUNT, */ 
+    DataKey, FeeInfo
+};
 
 
 pub fn fee_check(e: &Env) -> bool {
@@ -27,5 +29,9 @@ pub fn fee_set(e: &Env, fee_info: &FeeInfo) {
     let key = DataKey::FEE;
 
     e.storage().instance().set(&key, fee_info);
-    e.storage().instance().bump(200000000);
+    // e.storage().instance().bump(INSTANCE_LIFETIME_THRESHOLD, INSTANCE_BUMP_AMOUNT);
+}
+
+pub fn calculate_fee(_e: &Env, fee_info: &FeeInfo, amount: u64) -> u64 {
+    amount * (fee_info.fee_rate as u64) / (u64::pow(10, FEE_DECIMALS))
 }

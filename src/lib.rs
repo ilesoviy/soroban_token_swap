@@ -3,6 +3,7 @@
 //! It demonstrates one of the ways of how swap might be implemented.
 #![no_std]
 
+mod admin;
 mod storage_types;
 mod fee;
 mod allow;
@@ -12,17 +13,35 @@ mod offer;
 use soroban_sdk::{
     contract, contractimpl, Address, Env, /* BytesN */
 };
-use crate::storage_types::{ FeeInfo/* , DataKey */ };
+use crate::storage_types::{ FeeInfo, INSTANCE_BUMP_AMOUNT, INSTANCE_LIFETIME_THRESHOLD};
 use crate::fee::{ fee_set, fee_get };
 use crate::allow::{ allow_set, allow_reset };
 use crate::offer::{ error, offer_count, offer_create, offer_accept, offer_update, offer_close, offer_load, offer_balances };
-
+use crate::admin::{ read_administrator, write_administrator, has_administrator };
 
 #[contract]
 pub struct TokenSwap;
 
 #[contractimpl]
 impl TokenSwap {
+    pub fn initialize(e: Env, admin: Address) {
+        if has_administrator(&e) {
+            panic!("already initialized");
+        }
+        write_administrator(&e, &admin);
+    }
+
+    pub fn set_admin(e: Env, new_admin: Address) {
+        let admin = read_administrator(&e);
+        admin.require_auth();
+
+        e.storage()
+            .instance()
+            .extend_ttl(INSTANCE_LIFETIME_THRESHOLD, INSTANCE_BUMP_AMOUNT);
+
+        write_administrator(&e, &new_admin);
+    }
+
     pub fn set_fee(e: Env, fee_rate: u32, fee_wallet: Address) {
         let fee_info: FeeInfo = FeeInfo {fee_rate, fee_wallet};
         fee_set(&e, &fee_info);

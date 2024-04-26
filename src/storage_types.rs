@@ -64,4 +64,5 @@ pub enum DataKey {
     OfferCount,
     RegOffers(u32),
     ErrorCode,
+    Admin,
 }

@@ -4,10 +4,15 @@ use crate::storage_types::{ /* INSTANCE_LIFETIME_THRESHOLD, INSTANCE_BUMP_AMOUNT
     DataKey
 };
 
+use crate::admin::{ 
+    read_administrator, 
+};
+
 
 pub fn allow_set(e: &Env, token_addr: &Address) {
     let key = DataKey::Allowance(token_addr.clone());
-    
+    let admin = read_administrator(&e);
+    admin.require_auth();
     if e.storage().instance().has(&key) && e.storage().instance().get::<_, bool>(&key).unwrap() {
         log!(&e, "current token was already allowed");
         return;
@@ -18,7 +23,8 @@ pub fn allow_set(e: &Env, token_addr: &Address) {
 
 pub fn allow_reset(e: &Env, token_addr: &Address) {
     let key = DataKey::Allowance(token_addr.clone());
-
+    let admin = read_administrator(&e);
+    admin.require_auth();
     if !e.storage().instance().has(&key) || !e.storage().instance().get::<_, bool>(&key).unwrap() {
         log!(&e, "current token wasn't allowed");
         return;

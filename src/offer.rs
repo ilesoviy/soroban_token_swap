@@ -94,7 +94,7 @@ pub fn offer_create(
     if send_token_client.allowance(&offeror, &contract) < (transfer_amount as i128) {
         // panic!(e, "insufficient creator's allowance");
         send_token_client.approve(&offeror, &contract, &(transfer_amount as i128), &(e.ledger().sequence() + BALANCE_BUMP_AMOUNT));
-        return 107;
+        // return 107;
     }
 
     send_token_client.transfer(&offeror, &contract, &(send_amount as i128));
@@ -115,7 +115,7 @@ pub fn offer_create(
     );
     let new_offer_count: u32 = offer_count + 1;
     e.storage().instance().set(&DataKey::OfferCount, &new_offer_count);
-    e.storage().instance().bump(INSTANCE_LIFETIME_THRESHOLD, INSTANCE_BUMP_AMOUNT);
+    e.storage().instance().extend_ttl(INSTANCE_LIFETIME_THRESHOLD, INSTANCE_BUMP_AMOUNT);
 
     // emit OfferCreated event
     e.events().publish((OFFER, symbol_short!("OCreate")), 
@@ -174,7 +174,7 @@ pub fn offer_accept(e: &Env,
     if recv_token_client.allowance(&acceptor, &contract.clone()) < (amount + fee_amount) as i128 {
         // panic!("insufficient allowance");
         recv_token_client.approve(&acceptor, &contract, &((amount + fee_amount) as i128), &(e.ledger().sequence() + BALANCE_BUMP_AMOUNT));
-        return 116;
+        // return 116;
     }
 
     // Compute the amount of send_token that acceptor can receive.
